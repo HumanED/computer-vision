@@ -33,9 +33,41 @@ if(NOT HEADLESS)
     include_directories(${Pangolin_INCLUDE_DIRS})
 endif()
 
+# Core libraries
+add_library(realsense_camera src/realsense_camera.cpp)
+target_link_libraries(realsense_camera ${OpenCV_LIBS} ${realsense2_LIBRARY})
+
+add_library(orb_detector src/orb_detector.cpp)
+target_link_libraries(orb_detector ${OpenCV_LIBS})
+
+add_library(initializer src/initializer.cpp)
+target_link_libraries(initializer realsense_camera orb_detector ${OpenCV_LIBS})
+
+# Viewer library
+add_library(viewer src/viewer.cpp)
+target_link_libraries(viewer ${OpenCV_LIBS})
+
+if(NOT HEADLESS)
+    target_link_libraries(viewer ${Pangolin_LIBRARIES})
+endif()
+
 # Executable
 add_executable(test_initial_setup src/test_initial_setup.cpp)
 target_link_libraries(test_initial_setup
+    viewer
+    realsense_camera
+    orb_detector
+    initializer
+    ${OpenCV_LIBS}
+    ${realsense2_LIBRARY}
+)
+
+# Map initialization executable
+add_executable(initialize_map src/initialize_map.cpp)
+target_link_libraries(initialize_map
+    realsense_camera
+    orb_detector
+    initializer
     ${OpenCV_LIBS}
     ${realsense2_LIBRARY}
 )
@@ -50,3 +82,7 @@ set_target_properties(test_initial_setup PROPERTIES
     INSTALL_RPATH_USE_LINK_PATH TRUE
     INSTALL_RPATH "/usr/local/lib"
 )
+
+# Enable testing
+enable_testing()
+add_subdirectory(tests)

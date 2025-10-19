@@ -8,6 +8,11 @@ Intended as a semester-long project baseline for research and improvement.
 - Tracking
 - Local Mapping
 - Loop Closing
+## Building
+
+```
+sudo bash setup_realsense.sh
+```
 
 ## Library
 
