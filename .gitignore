@@ -1,0 +1,57 @@
+# -----------------------------
+# Build and CMake artifacts
+# -----------------------------
+/build/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+cmake_uninstall.cmake
+librealsense/
+Makefile
+*.cmake.user
+*.ninja
+*.png
+# -----------------------------
+# Visual Studio Code
+# -----------------------------
+.vscode/
+
+# -----------------------------
+# macOS system files
+# -----------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# -----------------------------
+# Temporary files
+# -----------------------------
+*.swp
+*.swo
+*~
+*.log
+*.tmp
+
+# -----------------------------
+# Compiled libraries and executables
+# -----------------------------
+*.o
+*.obj
+*.so
+*.dylib
+*.a
+*.exe
+*.out
+*.app
+
+# -----------------------------
+# Python cache (if using scripts)
+# -----------------------------
+__pycache__/
+*.pyc
+*.pyo
+
+# -----------------------------
+# Ignore Pangolin build artifacts if included locally
+# -----------------------------
+/Pangolin/build/

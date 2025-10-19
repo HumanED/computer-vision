@@ -1,0 +1,38 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y cmake build-essential pkg-config
+        sudo apt install -y libopencv-dev libeigen3-dev
+        sudo apt install -y librealsense2-dev librealsense2-utils
+        sudo apt install -y libpangolin-dev
+    
+    - name: Build Project
+      run: |
+        chmod +x build.sh
+        ./build.sh
+    
+    - name: Run Tests
+      run: |
+        chmod +x run_tests.sh
+        ./run_tests.sh
+    
+    - name: Check Dependencies
+      run: |
+        chmod +x check_dependencies.sh
+        ./check_dependencies.sh
+
