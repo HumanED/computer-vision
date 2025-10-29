@@ -42,4 +42,4 @@ ORB-SLAM2-RGBD-D435i/
 ```
 
 # Contributors
-Hwayeon, Arjav, Turki, Gopesh, James, Ryan, Alp, Teymur
+Hwayeon, Arjav, Ryan, Teymur
