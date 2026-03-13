@@ -1,0 +1,12 @@
+# my_script — direct dependencies
+# Install the parol6 package first (from the repo root):
+#   pip install ..
+#
+# Then install these:
+#   pip install -r requirements.txt
+
+opencv-python>=4.8
+numpy>=1.24
+
+# Only required when running with a real RealSense camera (not needed for --mock)
+pyrealsense2>=2.54

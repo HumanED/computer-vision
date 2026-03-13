@@ -1,11 +1,3 @@
-"""
-Bring PAROL6 robot to home position.
-- Assumes a controller is already running at 127.0.0.1:5001
-
-Run from the repository root:
-    python my_script/go_home.py
-"""
-
 from parol6 import RobotClient
 
 HOST = "127.0.0.1"

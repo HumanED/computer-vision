@@ -1,35 +1,10 @@
-"""
-PAROL6 Person Follower — Intel RealSense + HOG body + Haar face detection.
-
-Behaviour
----------
-- Detects people using OpenCV's HOG pedestrian detector.
-- Detects faces using Haar cascade within the body region.
-- Primary target: face center. Fallback: upper-body center (head area).
-- Joint 1 (base) pans left/right to keep target horizontally centred.
-- Joint 2 (shoulder) tilts up/down to keep face vertically centred.
-- Follows the largest/closest person when multiple are detected.
-
-Requirements
-------------
-    pip install pyrealsense2 opencv-python numpy
-
-Usage
------
-Assumes a PAROL6 server is already running at 127.0.0.1:5001.
-Start it with:  parol6 server --port 5001
-
-    python my_script/person_follower.py
-    python my_script/person_follower.py --sim  # simulator mode
-"""
-
 import argparse
 import asyncio
 import time
+from typing import Any
 
 import cv2
 import numpy as np
-import pyrealsense2 as rs
 
 from parol6 import AsyncRobotClient
 
@@ -90,7 +65,6 @@ def best_body(bgr: np.ndarray) -> tuple | None:
     )
     if len(rects) == 0:
         return None
-    # pick the rect with the greatest area (closest / largest person)
     areas = [w * h for (x, y, w, h) in rects]
     return tuple(rects[int(np.argmax(areas))])
 
@@ -112,7 +86,6 @@ def find_face_in_roi(bgr: np.ndarray, body: tuple) -> tuple | None:
     )
     if len(faces) == 0:
         return None
-    # pick the largest face in ROI
     areas = [fw * fh for (fx, fy, fw, fh) in faces]
     fx, fy, fw, fh = faces[int(np.argmax(areas))]
     return (x + fx, y + fy, fw, fh)   # convert to full-frame coords
@@ -140,19 +113,9 @@ def get_target(bgr: np.ndarray) -> tuple[tuple | None, tuple | None, str]:
     return body, proxy, "body"
 
 
-# ── RealSense ──────────────────────────────────────────────────────────────────
+# ── Camera abstraction ─────────────────────────────────────────────────────────
 
-def start_realsense() -> tuple[rs.pipeline, rs.align]:
-    pipeline = rs.pipeline()
-    cfg = rs.config()
-    cfg.enable_stream(rs.stream.color, COLOR_W, COLOR_H, rs.format.bgr8, FPS)
-    cfg.enable_stream(rs.stream.depth, COLOR_W, COLOR_H, rs.format.z16, FPS)
-    pipeline.start(cfg)
-    align = rs.align(rs.stream.color)
-    return pipeline, align
-
-
-def sample_depth(depth_frame, cx: int, cy: int, radius: int = 6) -> float:
+def sample_depth(depth_frame: Any, cx: int, cy: int, radius: int = 6) -> float:
     arr = np.asanyarray(depth_frame.get_data())
     h, w = arr.shape
     patch = arr[
@@ -161,6 +124,50 @@ def sample_depth(depth_frame, cx: int, cy: int, radius: int = 6) -> float:
     ]
     valid = patch[patch > 0]
     return float(np.median(valid)) * DEPTH_MM_TO_M if valid.size else 0.0
+
+
+def build_camera(mock_source: str | None):
+    """Return a started camera object (real RealSense or mock)."""
+    if mock_source is not None:
+        from mock_camera import MockCamera
+        cam = MockCamera(source=mock_source)
+        cam.start()
+        return cam
+    return _RealSenseCamera()
+
+
+class _RealSenseCamera:
+    """Thin wrapper around the RealSense pipeline with the same interface as MockCamera."""
+
+    def __init__(self) -> None:
+        import pyrealsense2 as rs
+        self._rs = rs
+        self._pipeline: Any = None
+        self._align: Any = None
+
+    def start(self) -> None:
+        rs = self._rs
+        pipeline = rs.pipeline()
+        cfg = rs.config()
+        cfg.enable_stream(rs.stream.color, COLOR_W, COLOR_H, rs.format.bgr8, FPS)
+        cfg.enable_stream(rs.stream.depth, COLOR_W, COLOR_H, rs.format.z16,  FPS)
+        pipeline.start(cfg)
+        self._pipeline = pipeline
+        self._align = rs.align(rs.stream.color)
+        print("[INFO] RealSense started.")
+
+    def read(self) -> tuple[np.ndarray | None, Any]:
+        frames = self._pipeline.wait_for_frames(timeout_ms=5000)
+        aligned = self._align.process(frames)
+        color_frame = aligned.get_color_frame()
+        depth_frame = aligned.get_depth_frame()
+        if not color_frame or not depth_frame:
+            return None, None
+        return np.asanyarray(color_frame.get_data()), depth_frame
+
+    def stop(self) -> None:
+        if self._pipeline is not None:
+            self._pipeline.stop()
 
 
 # ── Robot control ──────────────────────────────────────────────────────────────
@@ -174,13 +181,11 @@ async def move_robot(client: AsyncRobotClient, error_x: int, error_y: int) -> No
     tasks = []
 
     if abs(error_x) >= H_DEADZONE_PX:
-        # person right of centre → rotate CW (BASE_NEG)
         joint = BASE_NEG if error_x > 0 else BASE_POS
         speed = px_to_speed(error_x, H_BASE_SPEED, H_MAX_SPEED)
         tasks.append(client.jog_joint(joint, speed, duration=JOG_DURATION))
 
     if abs(error_y) >= V_DEADZONE_PX:
-        # face below centre → tilt down (TILT_DOWN)
         joint = TILT_DOWN if error_y > 0 else TILT_UP
         speed = px_to_speed(error_y, V_BASE_SPEED, V_MAX_SPEED)
         tasks.append(client.jog_joint(joint, speed, duration=JOG_DURATION))
@@ -191,9 +196,8 @@ async def move_robot(client: AsyncRobotClient, error_x: int, error_y: int) -> No
 
 # ── Tracking loop ──────────────────────────────────────────────────────────────
 
-async def tracking_loop(client: AsyncRobotClient) -> None:
-    pipeline, align = start_realsense()
-    print("[INFO] RealSense started. Press 'q' to quit.")
+async def tracking_loop(client: AsyncRobotClient, camera: Any) -> None:
+    print("[INFO] Starting tracking loop. Press 'q' to quit.")
     await asyncio.sleep(1.0)
 
     cx_img = COLOR_W // 2
@@ -202,20 +206,15 @@ async def tracking_loop(client: AsyncRobotClient) -> None:
 
     try:
         while True:
-            frames = pipeline.wait_for_frames(timeout_ms=5000)
-            aligned = align.process(frames)
-            color_frame = aligned.get_color_frame()
-            depth_frame = aligned.get_depth_frame()
-            if not color_frame or not depth_frame:
+            bgr, depth_frame = camera.read()
+            if bgr is None or depth_frame is None:
                 continue
 
-            bgr = np.asanyarray(color_frame.get_data())
             body, target, mode = get_target(bgr)
 
             vis = bgr.copy()
-            # crosshair
-            cv2.line(vis, (cx_img, 0),       (cx_img, COLOR_H), (255, 255, 0), 1)
-            cv2.line(vis, (0, cy_img),        (COLOR_W, cy_img), (255, 255, 0), 1)
+            cv2.line(vis, (cx_img, 0),      (cx_img, COLOR_H), (255, 255, 0), 1)
+            cv2.line(vis, (0, cy_img),      (COLOR_W, cy_img), (255, 255, 0), 1)
 
             if body is not None:
                 bx, by, bw, bh = body
@@ -254,7 +253,7 @@ async def tracking_loop(client: AsyncRobotClient) -> None:
             await asyncio.sleep(0)
 
     finally:
-        pipeline.stop()
+        camera.stop()
         cv2.destroyAllWindows()
 
 
@@ -272,18 +271,27 @@ async def run(args: argparse.Namespace) -> int:
             await client.simulator_on()
             print("[INFO] Simulator mode ON — no real motion.")
 
-        await tracking_loop(client)
+        mock_source = args.mock if args.mock is not None else None
+        camera = build_camera(mock_source)
+        await tracking_loop(client, camera)
 
     return 0
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Make the PAROL6 robot follow a person using RealSense depth camera."
+        description="Make the PAROL6 robot follow a person using a depth camera."
     )
     parser.add_argument(
         "--sim", action="store_true",
-        help="Enable simulator mode (commands sent but robot does not move).",
+        help="Simulator mode: commands sent but robot does not move.",
+    )
+    parser.add_argument(
+        "--mock", nargs="?", const="synthetic", metavar="SOURCE",
+        help=(
+            "Use mock camera instead of real RealSense. "
+            "SOURCE: 'synthetic' (default), 'webcam', or 'file:PATH'."
+        ),
     )
     args = parser.parse_args()
     raise SystemExit(asyncio.run(run(args)))
