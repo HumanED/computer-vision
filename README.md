@@ -9,6 +9,7 @@ Hardware access is limited, so all scripts support a `--mock` camera mode and a 
 ```
 src/
   person_follower.py   Vision-guided person tracking
+  avoid_obstacles.py   Real-time depth-based obstacle avoidance with e-stop
   go_home.py           Move the robot to its home position
 mock_camera.py         Mock RealSense camera (synthetic / webcam / video file)
 tests/                 Unit tests (no hardware required)
@@ -19,6 +20,7 @@ tests/                 Unit tests (no hardware required)
 | Script | Description |
 |---|---|
 | `person_follower.py` | Detects a person with HOG + Haar and pans/tilts the robot to keep them centred |
+| `avoid_obstacles.py` | Reads depth from the ROI, scales robot velocity, and triggers an e-stop when obstacles are too close |
 | `go_home.py` | Sends the robot to its home position |
 
 More behaviours will be added here as the project grows.
@@ -55,6 +57,7 @@ Every script supports two flags for offline development:
 Combine them to run with no hardware at all:
 ```bash
 python src/person_follower.py --sim --mock
+python src/avoid_obstacles.py --sim --mock
 ```
 
 ## Mock camera
@@ -84,6 +87,15 @@ python src/person_follower.py --sim --mock webcam
 # Person follower — replay a video clip
 python src/person_follower.py --mock file:clip.mp4
 
+# Obstacle avoidance — real hardware
+python src/avoid_obstacles.py
+
+# Obstacle avoidance — fully offline
+python src/avoid_obstacles.py --sim --mock
+
+# Obstacle avoidance — webcam depth, robot in simulator
+python src/avoid_obstacles.py --sim --mock webcam
+
 # Send robot home
 python src/go_home.py
 ```
@@ -97,8 +109,9 @@ python -m pytest tests/ -v
 ```
 
 All tests run without hardware. The mock camera and pure-logic functions in
-`person_follower.py` (speed calculation, depth sampling, robot direction) are
-covered without needing a RealSense or a running PAROL6 server.
+`person_follower.py` (speed calculation, depth sampling, robot direction) and
+`avoid_obstacles.py` (nearest obstacle distance, velocity scaling, e-stop logic)
+are covered without needing a RealSense or a running PAROL6 server.
 
 ## Notes
 
