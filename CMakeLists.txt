@@ -33,6 +33,8 @@ if(NOT HEADLESS)
     include_directories(${Pangolin_INCLUDE_DIRS})
 endif()
 
+# Executables
+# Test initial setup
 # Core libraries
 add_library(realsense_camera src/realsense_camera.cpp)
 target_link_libraries(realsense_camera ${OpenCV_LIBS} ${realsense2_LIBRARY})
@@ -83,6 +85,23 @@ set_target_properties(test_initial_setup PROPERTIES
     INSTALL_RPATH "/usr/local/lib"
 )
 
+# Basic Visual Odometry Tracker
+add_executable(basic_vo_tracker src/basic_vo_tracker.cpp)
+target_link_libraries(basic_vo_tracker
+    realsense_camera
+    orb_detector
+    initializer
+    ${OpenCV_LIBS}
+    ${realsense2_LIBRARY}
+    Eigen3::Eigen
+)
+
+# RPATH
+set_target_properties(basic_vo_tracker PROPERTIES
+    BUILD_WITH_INSTALL_RPATH TRUE
+    INSTALL_RPATH_USE_LINK_PATH TRUE
+    INSTALL_RPATH "/usr/local/lib"
+)
 # Enable testing
 enable_testing()
 add_subdirectory(tests)
